@@ -11,11 +11,15 @@ import java.io.FileNotFoundException;
 
 public class SequenceAligner{
     public Hashtable<String, String> sequences = new Hashtable<String, String>();
+    
+    //some default values
     public int openGapPenalty = -5;
     public int gapExtensionPenalty = -1;
     public int matchScore = 1;
     public int mismatchPenalty = -1;
 
+    public String seq_type;
+    
     /*
      Todo: as the user for scoring parameters. As noted in the assignment.
      Particularly in regards to the affine gap penalty: A+(B⋅L)
@@ -32,7 +36,7 @@ public class SequenceAligner{
             String seq2 = s.get(keys[1]);
             int[][] matrix = seq_aligner.createMatrix(seq1, seq2);
 
-            seq_aligner.printMatrix(matrix);
+            seq_aligner.printMatrix(matrix, seq1, seq2);
             seq_aligner.initializeMatrix(matrix);
 
             //Begin the algorithm.
@@ -50,7 +54,7 @@ public class SequenceAligner{
         System.out.println("Welcome to Sequence Alignment. \nWe will help you align two sequences. \nLet's begin. \nProtein (p|P) or Nucleic Acid (n|N)?");
         //store response.
         Scanner scan = new Scanner(System.in);
-        String seq_type = scan.nextLine();
+        seq_type = scan.nextLine();
 
         System.out.println("Please give a complete file name. \nInclude the relative path to file \nfrom this directory or \nan absolute file path:");
 
@@ -91,6 +95,8 @@ public class SequenceAligner{
      }
 
     public int[][] createMatrix(String seq1, String seq2) {
+        System.out.println("seq1: " + seq1);
+        System.out.println("seq2: " + seq2);
         return new int[seq1.length()+1][seq2.length()+1];
     }
 
@@ -113,29 +119,30 @@ public class SequenceAligner{
             }
         }
 
-        this.printMatrix(matrix);
+        this.printMatrix(matrix, "", "");
      }
 
     /* The global gap alignment algorithm begins here.
     */
     public void needlemanWunsch(int[][] matrix, String seq1, String seq2) {
         System.out.println("public void needlemanWunsch(int[][] matrix, String seq1, String seq2)");
-        this.printMatrix(matrix);
+        this.printMatrix(matrix, seq1, seq2);
         //important that both i and j start with 1, 
         //because matrix 1st row and column has already been initialized!!
         for (int i = 1; i < matrix.length; i++) {
-            for (int j = 1; j < matrix.length; j++) {
+            for (int j = 1; j < matrix[0].length; j++) {
                 matrix[i][j] = this.findMaxScore(matrix, i, j, seq1, seq2);
             }
         }
 
         System.out.println("Ran the al-gore-rhythm, here is the matrix:");
-        this.printMatrix(matrix);
+
+        this.printMatrix(matrix, seq1, seq2);
     }
 
     public int findMaxScore(int[][] matrix, int i, int j, String seq1, String seq2) {
         System.out.println("public void findMaxScore(int[][] matrix, int i, int j)");
-        this.printMatrix(matrix);
+        this.printMatrix(matrix, seq1, seq2);
 
         //from the left
         int left = matrix[i][j-1] + this.decideGapPenalty(matrix, i, j, i, j-1);
@@ -155,6 +162,7 @@ public class SequenceAligner{
             max = diag;
         }
 
+        System.out.println("left: " + left + " top: " + top + " diag: " + diag + " max: " + max);
         return max;
     }
 
@@ -209,6 +217,7 @@ public class SequenceAligner{
     // }
 
     public int matchOrMismatch(int i, int j, String seq1, String seq2) {
+        // System.out.println("sequence type: " + seq_type);
         if (seq1.charAt(i) == seq2.charAt(j)) {
             return matchScore;
         } else {
@@ -216,7 +225,14 @@ public class SequenceAligner{
         }
     }
 
-    public void printMatrix(int[][] matrix) {
+    public String getAlignment(int[][] matrix) {
+        ArrayList<String> alignment = new ArrayList<String>();
+        String[] directions = new String[matrix.length + matrix[0].length];
+        //from the bottom left, call origin(matrix, i, j)
+        return "hey ma!";
+    }
+
+    public void printMatrix(int[][] matrix, String seq1, String seq2) {
         for (int i = 0; i < matrix.length; i++) {
             for (int j = 0; j < matrix[i].length; j++) {
                 System.out.print(matrix[i][j] + "\t");
