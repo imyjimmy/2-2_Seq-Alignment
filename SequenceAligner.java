@@ -1,6 +1,9 @@
 /* Data Structures */
 import java.util.ArrayList;
 import java.util.List;
+//may not need above.
+import java.util.Stack;
+
 import java.util.Hashtable;
 import java.util.Set;
 
@@ -12,6 +15,8 @@ import java.io.FileNotFoundException;
 public class SequenceAligner{
     public Hashtable<String, String> sequences = new Hashtable<String, String>();
     
+    // public Hashtable<String, String> parameters = new Hashtable<String, String>();
+
     //some default values
     public int openGapPenalty = -5;
     public int gapExtensionPenalty = -1;
@@ -27,11 +32,40 @@ public class SequenceAligner{
     /*
      Todo: as the user for scoring parameters. As noted in the assignment.
      Particularly in regards to the affine gap penalty: A+(B⋅L)
+     params: --interactive or -i
+     --type or -t (n|N or p|P)
+     --file or -f [filepath]
+     -m or --match
+     -n or --notmatch
+     -o or --ogap
+     -e or --egap
+     -h or --help 
     */
     public static void main(String []args){
+        Hashtable<String, String> parameters = new Hashtable<String, String>();
         SequenceAligner seq_aligner = new SequenceAligner();
-        seq_aligner.start();
-
+        if (args.length > 0 && (args[0].equals("-i") || args[0].equals("--interactive"))) {
+            //--interactive or -i
+            seq_aligner.startInteractive();
+            // parameters.put(args[0], "True");
+        } else if (args.length > 0 && (args[0].equals("-h") || args[0].equals("--help"))) {
+            System.out.println("params: --interactive or -i");
+            System.out.println("-h or --help to print this screen.");
+            System.out.println("--type or -t (n|N or p|P) for nucleotide or protein match");
+            System.out.println("--file or -f [filepath]");
+            System.out.println("-m or --match [score]");
+            System.out.println("-n or --notmatch [score]");
+            System.out.println("-o or --ogap open gap penalty [score]");
+            System.out.println("-e or --egap gap extension penalty [score]");
+            System.exit(0);
+        } else {
+            for (int i = 0; i < args.length-1; i+=2) {
+                parameters.put(args[i],args[i+1]);
+            }    
+            System.out.println(parameters);
+            seq_aligner.start(parameters);    
+        }
+        
         Hashtable<String, String> s = seq_aligner.sequences;
         String[] keys = s.keySet().toArray(new String[s.size()]);
 
@@ -48,15 +82,34 @@ public class SequenceAligner{
             //Begin the algorithm.
             seq_aligner.needlemanWunsch(matrix, cell_origin_matrix, seq1, seq2);
 
+            //return the alignment.
+            seq_aligner.getAlignment(matrix, cell_origin_matrix);
+
         } else { //multiple pair alignment. todo.
             //nothing for now.
         }
      }
 
-     /*
-     * The interface to this program.
-     */
+     /*   public int gapExtensionPenalty = -1;
+    public int matchScore = 1;
+    public int mismatchPenalty = -1;
+    */
     public void start() {
+        //assumption: all the params are given.
+        this.openGapPenalty = parameters.get("-o");
+        if (this.openGapPenalty == null) {
+            System.out.println("open gap param is missing.");
+            this.openGapPenalty = parameters.get("-ogap");
+        }
+
+        this.gapExtensionPenalty = parameters.get("-e");
+    }
+
+     /*
+     * The interactive interface to this program.
+     * @todo: ask for scoring params.
+     */
+    public void startInteractive() {
         System.out.println("Welcome to Sequence Alignment. \nWe will help you align two sequences. \nLet's begin. \nProtein (p|P) or Nucleic Acid (n|N)?");
         //store response.
         Scanner scan = new Scanner(System.in);
@@ -138,7 +191,7 @@ public class SequenceAligner{
             }
         }
 
-        this.printMatrix(matrix, cell_origin, "", "");
+        // this.printMatrix(matrix, cell_origin, "", "");
      }
 
     /* The global gap alignment algorithm begins here.
@@ -150,7 +203,7 @@ public class SequenceAligner{
         //because matrix 1st row and column has already been initialized!!
         for (int i = 1; i < matrix.length; i++) {
             for (int j = 1; j < matrix[0].length; j++) {
-                matrix[i][j] = this.findMaxScore(matrix, cell_origin, i, j, seq1, seq2);
+                matrix[i][j] = this.scoreEntry(matrix, cell_origin, i, j, seq1, seq2);
             }
         }
 
@@ -159,8 +212,9 @@ public class SequenceAligner{
         this.printMatrix(matrix, cell_origin, seq1, seq2);
     }
 
-    public int findMaxScore(int[][] matrix, Direction[][] cell_origin, int i, int j, String seq1, String seq2) {
-        System.out.println("public void findMaxScore(int[][] matrix, int i, int j)");
+    /* Assigns max scores to matrix */
+    public int scoreEntry(int[][] matrix, Direction[][] cell_origin, int i, int j, String seq1, String seq2) {
+        System.out.println("public void scoreEntry(int[][] matrix, int i, int j)");
         this.printMatrix(matrix, cell_origin, seq1, seq2);
 
         //from the left
@@ -198,6 +252,8 @@ public class SequenceAligner{
 
     /* 
     * LOTS OF ASSUMPTIONS
+    * when u assuuuume
+    * THIS WILL BE FIXED TOO
     */
     public int decideGapPenalty(int[][] matrix, int i, int j, int prev_i, int prev_j) {
         if (prev_i < i) { //from top
@@ -238,16 +294,58 @@ public class SequenceAligner{
         }
     }
 
-    public String getAlignment(int[][] matrix) {
-        ArrayList<String> alignment = new ArrayList<String>();
-        String[] directions = new String[matrix.length + matrix[0].length];
-        //from the bottom left, call cellOrigin(matrix, i, j)
-        return "hey ma!";
+    //is this method even worth it?
+    public Direction cellOrigin(Direction[][] cell_origin, int i, int j) {
+        return cell_origin[i][j];
+    }
+
+    /* BULK OF THE WORK HERE 
+    *  
+    */
+    public void getAlignment(int[][] matrix, Direction[][] cell_origin) {
+        //first, get the max value of the bottom row of 'matrix'
+        int max = 0;
+        int max_j_index = 0;
+        int i = matrix.length-1;
+        for (int j = 0; j < matrix[i].length; j++) {
+            if (j == 0) {
+                max = matrix[i][j];
+                max_j_index = 0;
+            } else {
+                if (matrix[i][j] > max) {
+                    max = matrix[i][j];
+                    max_j_index = j;
+                }
+            }
+        }
+        //now we have the max.
+        System.out.println("Max: " + max + " at: " + max_j_index);
+
+        // Stack<Direction[]> path = new Stack<Direction[]>();
+        // System.out.println(cell_origin[i][max_j_index]);
+        // path.push()
+        //@todo: depth first traversal.
+        //to construct
     }
 
     public void printMatrix(int[][] matrix, Direction[][] cell_origin, String seq1, String seq2) {
         System.out.println("here's the alignment matrix:");
+        System.out.println("seq1:" + seq1);
+        System.out.println("seq2:" + seq2);
+        
+        System.out.print("\t\t");
+        for (int j = 0; j < seq2.length(); j++) {
+            System.out.print(seq2.charAt(j) + "\t");
+        }
+        System.out.println();
+
         for (int i = 0; i < matrix.length; i++) {
+            if (i == 0) {
+                System.out.print("\t");
+            }
+            if (i >= 1) {
+                System.out.print(seq1.charAt(i-1) + "\t");
+            }
             for (int j = 0; j < matrix[i].length; j++) {
                 System.out.print(matrix[i][j] + "\t");
             }   
