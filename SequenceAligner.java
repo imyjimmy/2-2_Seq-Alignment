@@ -112,19 +112,26 @@ public class SequenceAligner{
                 String line = inputFile.nextLine();
                 System.out.println(line);
                 if (line.startsWith(">")) {
+                    if (!"".equals(val) && !"".equals(key)) { //avoids null pointer exceptions.
+                        sequences.put(key, val);
+                        System.out.println("putting into sequences: key is " + key + " val is " + val);
+                        key = "";
+                        val = "";
+                    }
+                    //new key
                     key = line.substring(1);
-                    System.out.println("substring: " + key);
+                    System.out.println("key substring: " + key);
                 } else {
-                    val = line;
-                }
-
-                if (!"".equals(val) && !"".equals(key)) { //avoids null pointer exceptions.
-                    sequences.put(key, val);
-                    key = "";
-                    val = "";
+                    val += line;
                 }
             } while (inputFile.hasNextLine());
 
+            if (!"".equals(val) && !"".equals(key)) { //avoids null pointer exceptions.
+                sequences.put(key, val);
+                System.out.println("putting into sequences: key is " + key + " val is " + val);
+                key = "";
+                val = "";
+            }
             /* 
             * Assumption: the sequence is now loaded.
             */
@@ -522,7 +529,7 @@ public class SequenceAligner{
             this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, temp);
 
         } else if (cell_origin[i][j] == Direction.ALL) {
-            System.out.println("3 way tie");
+            // System.out.println("3 way tie");
             String temp = output;
             String temp2 = output;
 
@@ -556,7 +563,8 @@ public class SequenceAligner{
                 top += String.valueOf(reverse.charAt(i));
             }
         }
-
+        //todo: print things out better-- 
+        //24 chars to a line, and print alignment # (eg 1st possible alignment etc, total number of alignments)
         System.out.println(top);
         System.out.println(bottom);
     }
