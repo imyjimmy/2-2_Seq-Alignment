@@ -14,8 +14,7 @@ import java.io.FileNotFoundException;
 
 public class SequenceAligner{
     public Hashtable<String, String> sequences = new Hashtable<String, String>();
-    
-    // public Hashtable<String, String> parameters = new Hashtable<String, String>();
+    public Hashtable<String, Integer> pam100 = new Hashtable<String, Integer>();
 
     //some default values
     public int openGapPenalty = -5;
@@ -68,19 +67,18 @@ public class SequenceAligner{
             seq_aligner.start(parameters);    
         }
         
-        System.out.println("here");
         Hashtable<String, String> s = seq_aligner.sequences;
         String[] keys = s.keySet().toArray(new String[s.size()]);
 
         if (keys.length == 2) {
-            System.out.println("inside keys.length == 2");
-            String seq1 = s.get(keys[0]);
-            String seq2 = s.get(keys[1]);
+            // System.out.println("inside keys.length == 2");
+            String seq1 = s.get(keys[1]);
+            String seq2 = s.get(keys[0]);
 
             int[][] matrix = seq_aligner.createMatrix(seq1, seq2);
             Direction[][] cell_origin_matrix = new Direction[seq1.length()+1][seq2.length()+1];
 
-            seq_aligner.printMatrix(matrix, cell_origin_matrix, seq1, seq2);
+            // seq_aligner.printMatrix(matrix, cell_origin_matrix, seq1, seq2);
             seq_aligner.initializeMatrix(matrix, cell_origin_matrix);
 
             //Begin the algorithm.
@@ -89,6 +87,13 @@ public class SequenceAligner{
             //return the alignment.
             seq_aligner.getAlignment(matrix, cell_origin_matrix, seq1, seq2);
 
+            // System.out.println(seq_aligner.seq_type);
+
+            if (seq_aligner.seq_type.equals("P") || seq_aligner.seq_type.equals("p")) {
+                seq_aligner.parsePAM();
+                Integer i = seq_aligner.pam100.get("IV");
+                // System.out.println("getting match IV: " + i.toString());
+            }
         } else { //multiple pair alignment. todo.
             //nothing for now.
             System.out.println("starting multi pair alignment");
@@ -98,7 +103,7 @@ public class SequenceAligner{
     /* helper method
     */
     public void parseFile(String filename) {
-        System.out.println("public void parseFile(String filename) {");
+        // System.out.println("public void parseFile(String filename) {");
         File file = new File(filename);
         try { 
             Scanner inputFile = new Scanner(file); 
@@ -125,6 +130,45 @@ public class SequenceAligner{
             * Assumption: the sequence is now loaded.
             */
 
+        } catch (FileNotFoundException fnfe) {
+            fnfe.printStackTrace();
+        }
+    }
+
+    public void parsePAM() {
+        // System.out.println("inside parsePam");
+        File pam = new File("100pam.txt");
+        String column = "";
+        String line;
+        //char[] column = new char[](20); //20 amino acids. hardcoded by nature since apx billions of years ago.
+        try {
+            Scanner inputFile = new Scanner(pam);
+            int row = 0;
+            do {
+                line = inputFile.nextLine();
+                // System.out.println("inside parsePam");
+                // System.out.println(line);
+                if (line.startsWith(" ")) {    //first line
+                    line = line.replaceAll("\\s+","");
+                    column = line;
+                    // System.out.println(line);
+                    // System.out.println(line.length());
+                    // System.out.println(column);
+                } else { // not the first line
+                    char aa = line.charAt(0);
+                    for (int i = row-1; i < column.length(); i++) {
+                        String number = line.substring(3*i+2, 3*i+4);
+                        number = number.replaceAll("\\s+", "");
+                        
+                        Integer value = Integer.valueOf(number);
+                        String key = "" + aa + column.charAt(i);
+
+                        // System.out.println("key: " + key + " value: " + number);
+                        pam100.put(key, value);
+                    }
+                }
+                row++;
+            } while (inputFile.hasNextLine());
         } catch (FileNotFoundException fnfe) {
             fnfe.printStackTrace();
         }
@@ -194,7 +238,7 @@ public class SequenceAligner{
         }
         this.parseFile(filename);
 
-        System.out.println("got to end of start method");
+        // System.out.println("got to end of start method");
     }
 
      /*
@@ -226,7 +270,7 @@ public class SequenceAligner{
     public void initializeMatrix(int[][] matrix, Direction[][] cell_origin) {
         //-5 = opening penalty
         //-1 = extension penalty
-        System.out.println("public void initializeMatrix(int[][] matrix) ");
+        // System.out.println("public void initializeMatrix(int[][] matrix) ");
         for (int i = 0; i < matrix.length; i++) {
             if (i == 0) {
                 for (int j = 0; j < matrix[i].length; j++) {
@@ -261,8 +305,8 @@ public class SequenceAligner{
     /* The global gap alignment algorithm begins here.
     */
     public void needlemanWunsch(int[][] matrix, Direction[][] cell_origin, String seq1, String seq2) {
-        System.out.println("public void needlemanWunsch(int[][] matrix, Direction[][] cell_origin, String seq1, String seq2)");
-        this.printMatrix(matrix, cell_origin, seq1, seq2);
+        // System.out.println("public void needlemanWunsch(int[][] matrix, Direction[][] cell_origin, String seq1, String seq2)");
+        // this.printMatrix(matrix, cell_origin, seq1, seq2);
         //important that both i and j start with 1, 
         //because matrix 1st row and column has already been initialized!!
         for (int i = 1; i < matrix.length; i++) {
@@ -278,8 +322,8 @@ public class SequenceAligner{
 
     /* Assigns max scores to matrix, assigns direction to cell_origin matrix */
     public int scoreEntry(int[][] matrix, Direction[][] cell_origin, int i, int j, String seq1, String seq2) {
-        System.out.println("public void scoreEntry(int[][] matrix, int i, int j)");
-        this.printMatrix(matrix, cell_origin, seq1, seq2);
+        // System.out.println("public void scoreEntry(int[][] matrix, int i, int j)");
+        // this.printMatrix(matrix, cell_origin, seq1, seq2);
 
         //from the left
         int left = matrix[i][j-1] + this.decideGapPenalty(matrix, cell_origin, i, j, i, j-1);
@@ -310,7 +354,7 @@ public class SequenceAligner{
             cell_origin[i][j] = Direction.ALL;
         }
 
-        System.out.println("left: " + left + " top: " + top + " diag: " + diag + " max: " + max);
+        // System.out.println("left: " + left + " top: " + top + " diag: " + diag + " max: " + max);
         return max;
     }
 
@@ -354,6 +398,7 @@ public class SequenceAligner{
                 return mismatchPenalty;
             }
         } else { //protein comparison. use that pam matrix.
+            this.pam100.get("IV");
             return 0;
         }
     }
@@ -372,6 +417,8 @@ public class SequenceAligner{
         int max_j_index = 0;
         int max_i_index = 0;
         int i = matrix.length-1;
+
+        System.out.println("Max: " + max);
         for (int j = 0; j < matrix[i].length; j++) {
             if (j == 0) {
                 max = matrix[i][j];
@@ -385,28 +432,32 @@ public class SequenceAligner{
                     //we have to worry about tiebreakers..?
                 }
             }
-
-            if (j == matrix[i].length-1) {
-                for (int k = 0; k < matrix.length; k++) {
-                    if (matrix[k][j] > max) {
-                        max_j_index = j;
-                        max_i_index = k;
-                    } else if (matrix[k][j] == max) {
-                        //haha
-                    }
-                }
+        }
+        //now we have the max along the bottom row.
+        //now going along the rightmost column.
+        System.out.println("Max: " + max);
+        int j = matrix[0].length-1;
+        for (int k = 0; k < matrix.length-1; k++) {
+            System.out.println("Matrix: " + matrix[k][j]);
+            if (matrix[k][j] > max) {
+                max_j_index = j;
+                max_i_index = k;
+                max = matrix[k][j];
+            } else if (matrix[k][j] == max) {
+                //tiebreakers.
             }
         }
-        //now we have the max.
+
         //assuming one max value for now...
         System.out.println("Max: " + max + " at j: " + max_j_index + " at i: " + max_i_index);
 
-        this.traverse(max_i_index, max_j_index, matrix, cell_origin, seq1, seq2, "");
-        // Stack<Direction[]> path = new Stack<Direction[]>();
-        // System.out.println(cell_origin[i][max_j_index]);
-        // path.push()
-        //@todo: depth first traversal.
-        //to construct
+        //@todo: before traverse, pretty print terminal gap
+        String terminalGap = "";
+        if (max_i_index != matrix.length-1 || max_j_index != matrix[0].length-1) {
+            terminalGap = prettyPrintTerminal(max_i_index, max_j_index, matrix, cell_origin, seq1, seq2);
+        }
+
+        this.traverse(max_i_index, max_j_index, matrix, cell_origin, seq1, seq2, terminalGap);
     }
 
     /* STRT, LEFT, TOP, DG, LD, TD, LT, ALL;
@@ -414,29 +465,74 @@ public class SequenceAligner{
     public void traverse(int i, int j, int[][] matrix, Direction[][] cell_origin, String seq1, String seq2, String output) { //should it return String
         if (cell_origin[i][j] == Direction.STRT) {
             //base case
-            System.out.println("base case reached. output: " + output);
+            // System.out.println("base case reached. output: " + output);
+            //@todo: prettyPrint needs to handle terminal gaps. but it cant be in the base case
             prettyPrintAlignment(output);
         } else if (cell_origin[i][j] == Direction.DG) { // diagonal
             output += String.valueOf(seq1.charAt(i-1)) + String.valueOf(seq2.charAt(j-1));
-            System.out.println("diag case reached. output: " + output);
+            // System.out.println("diag case reached. output: " + output);
             this.traverse(i-1, j-1, matrix, cell_origin, seq1, seq2, output);  
+        
         } else if (cell_origin[i][j] == Direction.LEFT) {
-            System.out.println("left case reached.");
+            // System.out.println("left case reached.");    
             output += "-" + String.valueOf(seq2.charAt(j-1));
             this.traverse(i, j-1, matrix, cell_origin, seq1, seq2, output);
+        
         } else if (cell_origin[i][j] == Direction.TOP) {
-            System.out.println("top case reached.");
+            // System.out.println("top case reached.");    
             output += String.valueOf(seq1.charAt(i-1)) + "-";
             this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, output);
+        
         } else if (cell_origin[i][j] == Direction.LD) {
+            // System.out.println("tie between left, diag");
+            String temp = output;
+            output += String.valueOf(seq1.charAt(i-1)) + String.valueOf(seq2.charAt(j-1));
+            this.traverse(i-1, j-1, matrix, cell_origin, seq1, seq2, output);  //traversing diag
+            
+            // System.out.println("done traversing diag, now going left.");
+            temp += "-" + String.valueOf(seq2.charAt(j-1));
+            this.traverse(i , j-1, matrix, cell_origin, seq1, seq2, temp);
 
         } else if (cell_origin[i][j] == Direction.TD) {
-
+            // System.out.println("tie between top, diag");
+            String temp = output;
+            output += String.valueOf(seq1.charAt(i-1)) + String.valueOf(seq2.charAt(j-1));
+            this.traverse(i-1, j-1, matrix, cell_origin, seq1, seq2, output);  //traversing diag
+            
+            // System.out.println("done traversing diag, now going top.");
+            temp += String.valueOf(seq1.charAt(i-1)) + "-";
+            this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, temp);
+        
         } else if (cell_origin[i][j] == Direction.LT) {
+            // System.out.println("tie between top, left. go left first");
+            String temp = output;
+            
+            output += "-" + String.valueOf(seq2.charAt(j-1));
+            this.traverse(i, j-1, matrix, cell_origin, seq1, seq2, output);
+
+            // System.out.println("done going left, now going top");
+            temp += String.valueOf(seq1.charAt(i-1)) + "-";
+            this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, temp);
 
         } else if (cell_origin[i][j] == Direction.ALL) {
+            System.out.println("3 way tie");
+            String temp = output;
+            String temp2 = output;
 
+            //diag
+            output += String.valueOf(seq1.charAt(i-1)) + String.valueOf(seq2.charAt(j-1));
+            this.traverse(i-1, j-1, matrix, cell_origin, seq1, seq2, output);  
+            
+            //left 
+            temp += "-" + String.valueOf(seq2.charAt(j-1));
+            this.traverse(i, j-1, matrix, cell_origin, seq1, seq2, temp);
+
+            //top
+            temp2 += String.valueOf(seq1.charAt(i-1)) + "-";
+            this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, temp2);
         }
+
+        // System.out.println("got to end of this traverse method");
     }
 
     public void prettyPrintAlignment(String alignment) {
@@ -448,14 +544,29 @@ public class SequenceAligner{
         String bottom = "";
         for (int i = 0; i < alignment.length(); i++) {
             if (i % 2 == 0) {
-                top += String.valueOf(reverse.charAt(i));
-            } else {
                 bottom += String.valueOf(reverse.charAt(i));
+            } else {
+                top += String.valueOf(reverse.charAt(i));
             }
         }
 
         System.out.println(top);
         System.out.println(bottom);
+    }
+
+    public String prettyPrintTerminal(int i, int j, int[][] matrix, Direction[][] cell_origin, String seq1, String seq2) {
+        String toReturn = "";
+        if (i < matrix.length-1) { //not the bottom row
+            for (int k = i; k < matrix.length-1; k++) {
+                toReturn += "" + seq1.charAt(i-1) + "-";
+            }
+            //example: "-A-A-A"
+        } else { //not the rightmost column
+            for (int l = j; l < matrix[0].length-1; l++) {
+                toReturn += "-" + seq2.charAt(l-1);
+            }
+        }
+        return toReturn;
     }
 
     public void printMatrix(int[][] matrix, Direction[][] cell_origin, String seq1, String seq2) {
@@ -496,7 +607,6 @@ public class SequenceAligner{
             if (i >= 1) {
                 System.out.print(seq1.charAt(i-1) + "\t");
             }
-
             for (int j = 0; j < cell_origin[i].length; j++) {
                 System.out.print(cell_origin[i][j] + "\t");
             }   
