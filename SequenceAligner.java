@@ -78,6 +78,13 @@ public class SequenceAligner{
             int[][] matrix = seq_aligner.createMatrix(seq1, seq2);
             Direction[][] cell_origin_matrix = new Direction[seq1.length()+1][seq2.length()+1];
 
+            // System.out.println(seq_aligner.seq_type);
+            if (seq_aligner.seq_type.equals("P") || seq_aligner.seq_type.equals("p")) {
+                seq_aligner.parsePAM();
+                Integer i = seq_aligner.pam100.get("IV");
+                System.out.println("getting match IV: " + i.toString());
+            }
+
             // seq_aligner.printMatrix(matrix, cell_origin_matrix, seq1, seq2);
             seq_aligner.initializeMatrix(matrix, cell_origin_matrix);
 
@@ -86,14 +93,6 @@ public class SequenceAligner{
 
             //return the alignment.
             seq_aligner.getAlignment(matrix, cell_origin_matrix, seq1, seq2);
-
-            // System.out.println(seq_aligner.seq_type);
-
-            if (seq_aligner.seq_type.equals("P") || seq_aligner.seq_type.equals("p")) {
-                seq_aligner.parsePAM();
-                Integer i = seq_aligner.pam100.get("IV");
-                // System.out.println("getting match IV: " + i.toString());
-            }
         } else { //multiple pair alignment. todo.
             //nothing for now.
             System.out.println("starting multi pair alignment");
@@ -136,7 +135,7 @@ public class SequenceAligner{
     }
 
     public void parsePAM() {
-        // System.out.println("inside parsePam");
+        System.out.println("inside parsePam");
         File pam = new File("100pam.txt");
         String column = "";
         String line;
@@ -398,8 +397,19 @@ public class SequenceAligner{
                 return mismatchPenalty;
             }
         } else { //protein comparison. use that pam matrix.
-            this.pam100.get("IV");
-            return 0;
+            Integer score = new Integer(0);
+            char x = seq1.charAt(i);
+            char y = seq2.charAt(j);
+
+            System.out.println("Comparing: " + x + " and " + y + "...");
+            
+            score = this.pam100.get("" + x + y);
+            if (score == null) {
+                score = this.pam100.get("" + y + x);
+            }
+
+            System.out.println("protein score: " + score);
+            return score.intValue();
         }
     }
 
@@ -418,7 +428,6 @@ public class SequenceAligner{
         int max_i_index = 0;
         int i = matrix.length-1;
 
-        System.out.println("Max: " + max);
         for (int j = 0; j < matrix[i].length; j++) {
             if (j == 0) {
                 max = matrix[i][j];
@@ -435,10 +444,8 @@ public class SequenceAligner{
         }
         //now we have the max along the bottom row.
         //now going along the rightmost column.
-        System.out.println("Max: " + max);
         int j = matrix[0].length-1;
         for (int k = 0; k < matrix.length-1; k++) {
-            System.out.println("Matrix: " + matrix[k][j]);
             if (matrix[k][j] > max) {
                 max_j_index = j;
                 max_i_index = k;
@@ -449,7 +456,7 @@ public class SequenceAligner{
         }
 
         //assuming one max value for now...
-        System.out.println("Max: " + max + " at j: " + max_j_index + " at i: " + max_i_index);
+        // System.out.println("Max: " + max + " at j: " + max_j_index + " at i: " + max_i_index);
 
         //@todo: before traverse, pretty print terminal gap
         String terminalGap = "";
