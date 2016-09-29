@@ -70,6 +70,13 @@ public class SequenceAligner{
         Hashtable<String, String> s = seq_aligner.sequences;
         String[] keys = s.keySet().toArray(new String[s.size()]);
 
+        // System.out.println(seq_aligner.seq_type);
+        if (seq_aligner.seq_type.equals("P") || seq_aligner.seq_type.equals("p")) {
+            seq_aligner.parsePAM();
+            // Integer i = seq_aligner.pam100.get("IV");
+            // System.out.println("getting match IV: " + i.toString());
+        }
+        
         if (keys.length == 2) {
             // System.out.println("inside keys.length == 2");
             String seq1 = s.get(keys[1]);
@@ -77,13 +84,6 @@ public class SequenceAligner{
 
             int[][] matrix = seq_aligner.createMatrix(seq1, seq2);
             Direction[][] cell_origin_matrix = new Direction[seq1.length()+1][seq2.length()+1];
-
-            // System.out.println(seq_aligner.seq_type);
-            if (seq_aligner.seq_type.equals("P") || seq_aligner.seq_type.equals("p")) {
-                seq_aligner.parsePAM();
-                Integer i = seq_aligner.pam100.get("IV");
-                System.out.println("getting match IV: " + i.toString());
-            }
 
             // seq_aligner.printMatrix(matrix, cell_origin_matrix, seq1, seq2);
             seq_aligner.initializeMatrix(matrix, cell_origin_matrix);
@@ -96,6 +96,7 @@ public class SequenceAligner{
         } else { //multiple pair alignment. todo.
             //nothing for now.
             System.out.println("starting multi pair alignment");
+
         }
      }
 
@@ -110,17 +111,17 @@ public class SequenceAligner{
             String val = "";
             do {
                 String line = inputFile.nextLine();
-                System.out.println(line);
+                // System.out.println(line);
                 if (line.startsWith(">")) {
                     if (!"".equals(val) && !"".equals(key)) { //avoids null pointer exceptions.
                         sequences.put(key, val);
-                        System.out.println("putting into sequences: key is " + key + " val is " + val);
+                        // System.out.println("putting into sequences: key is " + key + " val is " + val);
                         key = "";
                         val = "";
                     }
                     //new key
                     key = line.substring(1);
-                    System.out.println("key substring: " + key);
+                    // System.out.println("key substring: " + key);
                 } else {
                     val += line;
                 }
@@ -128,7 +129,7 @@ public class SequenceAligner{
 
             if (!"".equals(val) && !"".equals(key)) { //avoids null pointer exceptions.
                 sequences.put(key, val);
-                System.out.println("putting into sequences: key is " + key + " val is " + val);
+                // System.out.println("putting into sequences: key is " + key + " val is " + val);
                 key = "";
                 val = "";
             }
@@ -244,6 +245,8 @@ public class SequenceAligner{
         }
         this.parseFile(filename);
 
+        //another parameter specifying location of pam matrix? -p?
+
         // System.out.println("got to end of start method");
     }
 
@@ -273,6 +276,7 @@ public class SequenceAligner{
         return new int[seq1.length()+1][seq2.length()+1];
     }
 
+    //matrix dimensions have already been determined.
     public void initializeMatrix(int[][] matrix, Direction[][] cell_origin) {
         //-5 = opening penalty
         //-1 = extension penalty
@@ -280,14 +284,10 @@ public class SequenceAligner{
         for (int i = 0; i < matrix.length; i++) {
             if (i == 0) {
                 for (int j = 0; j < matrix[i].length; j++) {
-                    if (j == 0) {
-                        matrix[i][j] = 0;
-                    } else {
-                        matrix[i][j] = -5+(-1*(j-1));
-                    }
+                    matrix[i][j] = 0;
                 } 
             } else { //i = 1, 2, etc.
-                matrix[i][0] = -5+(-1*(i-1));
+                matrix[i][0] = 0;
             }
         }
 
@@ -321,9 +321,8 @@ public class SequenceAligner{
             }
         }
 
-        System.out.println("Ran the al-gore-rhythm, here is the matrix:");
-
-        this.printMatrix(matrix, cell_origin, seq1, seq2);
+        // System.out.println("Ran the al-gore-rhythm, here is the matrix:");
+        // this.printMatrix(matrix, cell_origin, seq1, seq2);
     }
 
     /* Assigns max scores to matrix, assigns direction to cell_origin matrix */
@@ -365,7 +364,7 @@ public class SequenceAligner{
     }
 
     /* 
-    * LOTS OF ASSUMPTIONS
+    * @todo: LOTS OF ASSUMPTIONS
     * when u assuuuume
     * THIS WILL BE FIXED TOO--
     */
@@ -408,14 +407,14 @@ public class SequenceAligner{
             char x = seq1.charAt(i);
             char y = seq2.charAt(j);
 
-            System.out.println("Comparing: " + x + " and " + y + "...");
+            // System.out.println("Comparing: " + x + " and " + y + "...");
             
             score = this.pam100.get("" + x + y);
             if (score == null) {
                 score = this.pam100.get("" + y + x);
             }
 
-            System.out.println("protein score: " + score);
+            // System.out.println("protein score: " + score);
             return score.intValue();
         }
     }
