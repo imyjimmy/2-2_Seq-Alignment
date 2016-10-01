@@ -16,6 +16,15 @@ public class SequenceAligner{
     public Hashtable<String, String> sequences = new Hashtable<String, String>();
     public Hashtable<String, Integer> pam100 = new Hashtable<String, Integer>();
 
+    //MSA
+    public Hashtable<String, String> msa_pairs= new Hashtable<String, String>(); 
+    public Hashtable<String, Integer> msa_pairs_scores = new Hashtable<String, Integer>();
+    public Hashtable<String, Integer> msa_pairs_distances = new Hashtable<String, Integer>();
+    public double avgOutgroupDistance;
+
+    //newick tree?
+    // public Hashtable<String, Integer>
+
     //some default values
     public int openGapPenalty = -5;
     public int gapExtensionPenalty = -1;
@@ -23,6 +32,9 @@ public class SequenceAligner{
     public int mismatchPenalty = -1;
 
     public String seq_type;
+    public int numSolutions = 0;
+    public boolean multiseq;
+    public String pamFile;
 
     //matrix, cell_origin, seq1, seq2 (?)
 
@@ -73,12 +85,10 @@ public class SequenceAligner{
         // System.out.println(seq_aligner.seq_type);
         if (seq_aligner.seq_type.equals("P") || seq_aligner.seq_type.equals("p")) {
             seq_aligner.parsePAM();
-            // Integer i = seq_aligner.pam100.get("IV");
-            // System.out.println("getting match IV: " + i.toString());
         }
         
         if (keys.length == 2) {
-            // System.out.println("inside keys.length == 2");
+            seq_aligner.multiseq = false;
             String seq1 = s.get(keys[1]);
             String seq2 = s.get(keys[0]);
 
@@ -92,11 +102,89 @@ public class SequenceAligner{
             seq_aligner.needlemanWunsch(matrix, cell_origin_matrix, seq1, seq2);
 
             //return the alignment.
-            seq_aligner.getAlignment(matrix, cell_origin_matrix, seq1, seq2);
+            seq_aligner.getAlignment(matrix, cell_origin_matrix, keys[1], keys[0], seq1, seq2);
         } else { //multiple pair alignment. todo.
-            //nothing for now.
-            System.out.println("starting multi pair alignment");
+            seq_aligner.multiseq = true; //not sure why we need this...to tell prettyprint something?
+            String consensus = "";
 
+            keys = s.keySet().toArray(new String[s.size()]);
+            while( keys.length > 1) {
+                System.out.println("keys.length: " + keys.length);
+
+                for (int i = 0; i < keys.length-1; i++) {
+                    for (int j = i+1; j < keys.length; j++) {
+                        String seq1 = s.get(keys[i]);
+                        String seq2 = s.get(keys[j]);
+
+                        int[][] matrix = seq_aligner.createMatrix(seq1, seq2);
+                        Direction[][] cell_origin = new Direction[seq1.length()+1][seq2.length()+1];
+                        System.out.println("aligning: " + keys[i] + " with " + keys[j]);
+                        seq_aligner.initializeMatrix(matrix, cell_origin);
+                        seq_aligner.needlemanWunsch(matrix, cell_origin, seq1, seq2);
+                        seq_aligner.getAlignment(matrix, cell_origin, keys[i], keys[j], seq1, seq2);
+                    }
+                }
+
+                String[] keypairs = seq_aligner.msa_pairs_scores.keySet().toArray(new String[seq_aligner.msa_pairs_scores.size()]);
+               
+                // System.out.println("");
+                System.out.println("keypairs.length: " + keypairs.length);
+                //find the max (highest scoring) keypair.
+                int max = -10000;
+                int max_i = -1;
+                for (int i = 0; i < keypairs.length; i++) {
+                    System.out.println("pairs: " + keypairs[i]); 
+                    int score = seq_aligner.msa_pairs_scores.get(keypairs[i]).intValue();
+                    int distance = seq_aligner.msa_pairs_distances.get(keypairs[i]).intValue();
+
+                    System.out.println("score: " + score);
+                    System.out.println("distance: " + distance);
+                    if (score > max) {
+                        max = score;   
+                        max_i = i;
+                    }
+                }
+
+                System.out.println("max_i: " + max_i);
+                String maxkeys = keypairs[max_i];
+                String[] key = maxkeys.split(":");
+
+                String alignment = seq_aligner.msa_pairs.get(maxkeys);
+                String distanceStr = seq_aligner.msa_pairs_distances.get(maxkeys).toString();
+                System.out.println("closest alignments: " + alignment + " from: " + maxkeys);
+
+                consensus = seq_aligner.consensus(alignment);
+
+                String newKey = "(";
+                
+                //removing old keys, adding new ones. System.out.printf("Value: %.2f", value);
+                //DecimalFormat df = new DecimalFormat("#.00");
+                //df.format(...);
+                for (int i = 0; i < key.length; i++) {
+                    s.remove(key[i]);
+
+                    for (int j = 0; j < keypairs.length; j++) {
+                        if (keypairs[j].contains(key[i])) {
+                            seq_aligner.msa_pairs_scores.remove(keypairs[j]);
+                            seq_aligner.msa_pairs_distances.remove(keypairs[j]);
+                            seq_aligner.msa_pairs.remove(keypairs[j]);
+                        }
+                    }
+
+                    newKey += key[i];
+                    if (i != key.length -1){
+                        newKey += ",";
+                    } else if (i == key.length -1) {
+                        newKey += " " + distanceStr + " )";
+                    }
+                }
+                s.put(newKey, consensus);
+
+                keys = s.keySet().toArray(new String[s.size()]);
+            }
+
+            String consensusKey = s.keySet().toArray(new String[s.size()])[0];
+            System.out.println("consensus: " + consensusKey + " value: " + s.get(consensusKey));
         }
      }
 
@@ -113,8 +201,25 @@ public class SequenceAligner{
                 String line = inputFile.nextLine();
                 // System.out.println(line);
                 if (line.startsWith(">")) {
-                    if (!"".equals(val) && !"".equals(key)) { //avoids null pointer exceptions.
-                        sequences.put(key, val);
+                    if (!"".equals(val) && !"".equals(key)) { //puts the previous key val pair into sequences.
+
+                        if (this.seq_type.equals("n") || this.seq_type.equals("N")) {
+                            if ( (val.contains("T") && val.contains("U")) || (!val.matches("[ATCGU]+")) ) {
+                                System.out.println("sequence either contains both T and U, or contains illegal characters.");
+                                System.exit(1);
+                            } 
+                            else {
+                                sequences.put(key, val);    
+                            }
+                        } else { 
+                            if (!val.matches("[ARNDCQEGHILKMFPSTWYV]+")) {
+                                System.out.println("sequence contains illegal amino acid letters. Sorry.");
+                                System.exit(1);
+                            } else {
+                                sequences.put(key, val);
+                            }
+                        }
+                        
                         // System.out.println("putting into sequences: key is " + key + " val is " + val);
                         key = "";
                         val = "";
@@ -144,7 +249,7 @@ public class SequenceAligner{
 
     public void parsePAM() {
         System.out.println("inside parsePam");
-        File pam = new File("100pam.txt");
+        File pam = new File(this.pamFile);
         String column = "";
         String line;
         //char[] column = new char[](20); //20 amino acids. hardcoded by nature since apx billions of years ago.
@@ -181,7 +286,7 @@ public class SequenceAligner{
         }
     }
 
-    /*  
+    /*  parses command line params.
     */
     public void start(Hashtable<String, String> parameters) {
         //assumption: all the params are given.
@@ -232,6 +337,10 @@ public class SequenceAligner{
                 System.out.println("type param is missing");
                 System.exit(1);
             } 
+            if (!type.matches("[NnPp]+")) {
+                System.out.println("illegal value entered for type parameter.");
+                System.exit(1);
+            }
         }
         this.seq_type = type;
 
@@ -245,8 +354,18 @@ public class SequenceAligner{
         }
         this.parseFile(filename);
 
+        if (this.seq_type.equals("p") ||  this.seq_type.equals("P")) {
         //another parameter specifying location of pam matrix? -p?
-
+            String pamFile = parameters.get("-p");
+            if (pamFile == null) {
+                pamFile = parameters.get("--pamfile");
+                if (pamFile == null) {
+                    System.out.println("pam file param is missing");
+                    System.exit(1);
+                }
+            }
+            this.pamFile = pamFile;
+        }
         // System.out.println("got to end of start method");
     }
 
@@ -271,8 +390,8 @@ public class SequenceAligner{
      }
 
     public int[][] createMatrix(String seq1, String seq2) {
-        System.out.println("seq1: " + seq1);
-        System.out.println("seq2: " + seq2);
+        // System.out.println("seq1: " + seq1);
+        // System.out.println("seq2: " + seq2);
         return new int[seq1.length()+1][seq2.length()+1];
     }
 
@@ -419,15 +538,10 @@ public class SequenceAligner{
         }
     }
 
-    //is this method even worth it?
-    public Direction cellOrigin(Direction[][] cell_origin, int i, int j) {
-        return cell_origin[i][j];
-    }
-
     /* BULK OF THE WORK HERE 
     *  j is the column, i is the row.
     */
-    public void getAlignment(int[][] matrix, Direction[][] cell_origin, String seq1, String seq2) {
+    public void getAlignment(int[][] matrix, Direction[][] cell_origin, String key1, String key2, String seq1, String seq2) {
         //first, get the max value of the bottom row of 'matrix'
         int max = 0;
         int max_j_index = 0;
@@ -470,85 +584,194 @@ public class SequenceAligner{
             terminalGap = prettyPrintTerminal(max_i_index, max_j_index, matrix, cell_origin, seq1, seq2);
         }
 
-        this.traverse(max_i_index, max_j_index, matrix, cell_origin, seq1, seq2, terminalGap);
+        this.traverse(max_i_index, max_j_index, max, matrix, cell_origin, key1, key2, seq1, seq2, terminalGap);
     }
 
     /* STRT, LEFT, TOP, DG, LD, TD, LT, ALL;
     */
-    public void traverse(int i, int j, int[][] matrix, Direction[][] cell_origin, String seq1, String seq2, String output) { //should it return String
+    public void traverse(int i, int j, int max, int[][] matrix, Direction[][] cell_origin, String key1, String key2, String seq1, String seq2, String output) { //should it return String
+        if (this.numSolutions == 5 && !this.multiseq) {
+            System.out.println("Multiple Solutions were found...the top 5 solutions are printed above.");
+            System.out.println("This algorithm traverses multiple solutions by doing diagonals (matches)"); 
+            System.out.println("first. Therefore the best solution is most likely printed.");
+            System.exit(0);
+        }
         if (cell_origin[i][j] == Direction.STRT) {
             //base case
+            this.numSolutions++;
+            // System.out.println("number of solutions: " + this.numSolutions);
             // System.out.println("base case reached. output: " + output);
-            //@todo: prettyPrint needs to handle terminal gaps. but it cant be in the base case
-            prettyPrintAlignment(output);
-        } else if (cell_origin[i][j] == Direction.DG) { // diagonal
+            if (this.multiseq) {
+                String key = key1 + ":" + key2;
+                if (this.msa_pairs.get(key) == null) {
+                    //updates msa_pairs!
+                    System.out.println("adding pair " + key + " into msa hashes");
+                    this.msa_pairs.put(key, output);  
+                    this.msa_pairs_scores.put(key, new Integer(max));
+                    this.msa_pairs_distances.put(key, this.distance(output)); //needed?
+                } else {
+                    // since traverse method favors going diagonal in case of ties, I am inclined to comment out the following
+                    //String entry = this.msa_pairs.get(key);
+                    // entry += "\n" + output;
+                    // this.alignment.put(key, entry);
+                }
+            } else {
+                prettyPrintAlignment(key1, key2, max, output);    
+            }
+        } else if (cell_origin[i][j] == Direction.DG && (this.numSolutions < 5 || this.multiseq)) { // diagonal
             output += String.valueOf(seq1.charAt(i-1)) + String.valueOf(seq2.charAt(j-1));
             // System.out.println("diag case reached. output: " + output);
-            this.traverse(i-1, j-1, matrix, cell_origin, seq1, seq2, output);  
+            this.traverse(i-1, j-1, max, matrix, cell_origin, key1, key2, seq1, seq2, output);  
         
-        } else if (cell_origin[i][j] == Direction.LEFT) {
+        } else if (cell_origin[i][j] == Direction.LEFT && (this.numSolutions < 5 || this.multiseq)) {
             // System.out.println("left case reached.");    
             output += "-" + String.valueOf(seq2.charAt(j-1));
-            this.traverse(i, j-1, matrix, cell_origin, seq1, seq2, output);
+            this.traverse(i, j-1, max, matrix, cell_origin, key1, key2, seq1, seq2, output);
         
-        } else if (cell_origin[i][j] == Direction.TOP) {
+        } else if (cell_origin[i][j] == Direction.TOP && (this.numSolutions < 5 || this.multiseq)) {
             // System.out.println("top case reached.");    
             output += String.valueOf(seq1.charAt(i-1)) + "-";
-            this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, output);
+            this.traverse(i-1, j, max, matrix, cell_origin, key1, key2, seq1, seq2, output);
         
-        } else if (cell_origin[i][j] == Direction.LD) {
+        } else if (cell_origin[i][j] == Direction.LD && (this.numSolutions < 5 || this.multiseq)) {
             // System.out.println("tie between left, diag");
             String temp = output;
             output += String.valueOf(seq1.charAt(i-1)) + String.valueOf(seq2.charAt(j-1));
-            this.traverse(i-1, j-1, matrix, cell_origin, seq1, seq2, output);  //traversing diag
+            this.traverse(i-1, j-1, max, matrix, cell_origin, key1, key2, seq1, seq2, output);  //traversing diag
             
             // System.out.println("done traversing diag, now going left.");
             temp += "-" + String.valueOf(seq2.charAt(j-1));
-            this.traverse(i , j-1, matrix, cell_origin, seq1, seq2, temp);
+            this.traverse(i , j-1, max, matrix, cell_origin, key1, key2, seq1, seq2, temp);
 
-        } else if (cell_origin[i][j] == Direction.TD) {
+        } else if (cell_origin[i][j] == Direction.TD && (this.numSolutions < 5 || this.multiseq)) {
             // System.out.println("tie between top, diag");
             String temp = output;
             output += String.valueOf(seq1.charAt(i-1)) + String.valueOf(seq2.charAt(j-1));
-            this.traverse(i-1, j-1, matrix, cell_origin, seq1, seq2, output);  //traversing diag
+            this.traverse(i-1, j-1, max, matrix, cell_origin, key1, key2, seq1, seq2, output);  //traversing diag
             
             // System.out.println("done traversing diag, now going top.");
             temp += String.valueOf(seq1.charAt(i-1)) + "-";
-            this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, temp);
+            this.traverse(i-1, j, max, matrix, cell_origin, key1, key2, seq1, seq2, temp);
         
-        } else if (cell_origin[i][j] == Direction.LT) {
+        } else if (cell_origin[i][j] == Direction.LT && (this.numSolutions < 5 || this.multiseq)) {
             // System.out.println("tie between top, left. go left first");
             String temp = output;
             
             output += "-" + String.valueOf(seq2.charAt(j-1));
-            this.traverse(i, j-1, matrix, cell_origin, seq1, seq2, output);
+            this.traverse(i, j-1, max, matrix, cell_origin, key1, key2, seq1, seq2, output);
 
             // System.out.println("done going left, now going top");
             temp += String.valueOf(seq1.charAt(i-1)) + "-";
-            this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, temp);
+            this.traverse(i-1, j, max, matrix, cell_origin, key1, key2, seq1, seq2, temp);
 
-        } else if (cell_origin[i][j] == Direction.ALL) {
+        } else if (cell_origin[i][j] == Direction.ALL && (this.numSolutions < 5 || this.multiseq)) {
             // System.out.println("3 way tie");
             String temp = output;
             String temp2 = output;
 
             //diag
             output += String.valueOf(seq1.charAt(i-1)) + String.valueOf(seq2.charAt(j-1));
-            this.traverse(i-1, j-1, matrix, cell_origin, seq1, seq2, output);  
+            this.traverse(i-1, j-1, max, matrix, cell_origin, key1, key2, seq1, seq2, output);  
             
             //left 
             temp += "-" + String.valueOf(seq2.charAt(j-1));
-            this.traverse(i, j-1, matrix, cell_origin, seq1, seq2, temp);
+            this.traverse(i, j-1, max, matrix, cell_origin, key1, key2, seq1, seq2, temp);
 
             //top
             temp2 += String.valueOf(seq1.charAt(i-1)) + "-";
-            this.traverse(i-1, j, matrix, cell_origin, seq1, seq2, temp2);
+            this.traverse(i-1, j, max, matrix, cell_origin, key1, key2, seq1, seq2, temp2);
         }
 
         // System.out.println("got to end of this traverse method");
     }
 
-    public void prettyPrintAlignment(String alignment) {
+    public String consensus(String input) {
+        if (input.length() % 2 != 0) {
+            System.out.println("alignment string should have an even length!");
+            System.exit(1);
+        }
+
+        String reverse = "";
+        for (int i = input.length()-1; i>=0; i--) {
+            reverse += String.valueOf(input.charAt(i));
+        }
+        
+        String top = "";
+        String bottom = "";
+        for (int i = 0; i < input.length(); i++) {
+            if (i % 2 == 0) {
+                bottom += String.valueOf(reverse.charAt(i));
+            } else {
+                top += String.valueOf(reverse.charAt(i));
+            }
+        }
+
+        String toReturn = "";
+
+        for (int i = 0; i< top.length(); i++) {
+            if (top.charAt(i) == bottom.charAt(i)) {
+                toReturn += "" + top.charAt(i);
+            } else { //more on this later(?)
+                toReturn += "-";
+            }
+        }
+
+        return toReturn;
+    }
+
+    public int distance(String alignment) {
+        int distance = 0;
+
+        for (int i = 0; i < alignment.length()-1; i++) {
+            if (alignment.charAt(i) != alignment.charAt(i+1)) {
+                distance++;
+            }
+        }
+        return distance;
+    }
+
+    public double avgOutgroupDistance(String outGroup) {
+        return 0.0;
+    }
+
+    public double transformedDistance(String speciesA, String speciesB, String outGroup) { 
+        Integer ab_distance = this.msa_pairs_distances.get(speciesA + ":" + speciesB);
+        if (ab_distance == null) {
+            System.out.println("ab_distance was null, reversing the key");
+            ab_distance = this.msa_pairs_distances.get(speciesB + ":" + speciesA);   
+            if (ab_distance == null) {
+                System.out.println("paired distance is still null...crashing");
+                System.exit(1);
+            }
+        }  
+        double ab = (double) ab_distance.intValue();
+
+        Integer ao_distance = this.msa_pairs_distances.get(speciesA + ":" + outGroup); 
+        if (ao_distance == null) {
+            System.out.println("ao_distance was null, reversing the key");
+            ao_distance = this.msa_pairs_distances.get(outGroup + ":" + speciesA);
+            if (ao_distance == null) {
+                System.out.println("ao_distance is sill null...crashing");
+                System.exit(1);
+            }
+        }
+        double ao = (double) ao_distance.intValue();
+        
+        Integer bo_distance = this.msa_pairs_distances.get(speciesB + ":" + outGroup); 
+        if (bo_distance == null) {
+            System.out.println("bo_distance was null, reversing the key");
+            ao_distance = this.msa_pairs_distances.get(outGroup + ":" + speciesB);
+            if (bo_distance == null) {
+                System.out.println("ao_distance is sill null...crashing");
+                System.exit(1);
+            }
+        }
+        double bo = (double) bo_distance.intValue();
+    
+        return (ab - ao - bo) / 2.0 + this.avgOutgroupDistance;
+    }
+
+    public void prettyPrintAlignment(String key1, String key2, int max, String alignment) {
         String reverse = "";
         for (int i = alignment.length()-1; i>=0; i--) {
             reverse += String.valueOf(alignment.charAt(i));
@@ -562,25 +785,57 @@ public class SequenceAligner{
                 top += String.valueOf(reverse.charAt(i));
             }
         }
-        //todo: print things out better-- 
+         //todo: print things out better-- 
         //24 chars to a line, and print alignment # (eg 1st possible alignment etc, total number of alignments)
-        System.out.println(top);
-        System.out.println(bottom);
+        System.out.println("Alignment Score: " + max);
+        // System.out.println("saved to alignment scores: " + this.alignment_scores.get(key1 + ":" + key2));
+        int bottom_index = 0;
+        for (int i = 0; i < top.length(); i++) {             
+            System.out.print(top.charAt(i));    
+            if (((i % 60 == 0) && i > 0) || (i == top.length()-1)) {
+                System.out.print("\n");
+                for (int j = bottom_index; j<=i; j++) {
+                    System.out.print("|");
+                    if (j == i) {
+                        System.out.print("\n");
+                    }
+                }
+                for (int k = bottom_index; k<=i; k++) {
+                    System.out.print(bottom.charAt(k));
+                    bottom_index++;
+                }
+                System.out.print("\n\n");
+            }
+        }
+
+        // System.out.println(top);
+        // System.out.println(bottom);
+
+        // System.out.println("saved to alignment hash: " + this.alignment.get(key1 + ":" + key2));
     }
 
     public String prettyPrintTerminal(int i, int j, int[][] matrix, Direction[][] cell_origin, String seq1, String seq2) {
-        String toReturn = "";
+        String terminal = "";
         if (i < matrix.length-1) { //not the bottom row
+            // System.out.println("not the bottom row");
             for (int k = i; k < matrix.length-1; k++) {
-                toReturn += "" + seq1.charAt(i-1) + "-";
+                terminal += "" + "-" + seq1.charAt(k);
+                // System.out.println("terminal: " + terminal);
             }
             //example: "-A-A-A"
         } else { //not the rightmost column
+            // System.out.println("not the rightmost column");
             for (int l = j; l < matrix[0].length-1; l++) {
-                toReturn += "-" + seq2.charAt(l-1);
+                terminal += seq2.charAt(l) + "-";
             }
         }
-        return toReturn;
+
+        String reverse = "";
+        for (int k = terminal.length()-1; k>=0; k--) {
+            reverse += String.valueOf(terminal.charAt(k));
+        }
+        
+        return reverse;
     }
 
     public void printMatrix(int[][] matrix, Direction[][] cell_origin, String seq1, String seq2) {
