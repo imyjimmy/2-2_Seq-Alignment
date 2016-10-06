@@ -17,13 +17,17 @@ public class SequenceAligner{
     public Hashtable<String, Integer> pam100 = new Hashtable<String, Integer>();
 
     //MSA
-    public Hashtable<String, String> msa_pairs= new Hashtable<String, String>(); 
+    public Hashtable<String, String> msa_pairs = new Hashtable<String, String>(); 
+    //key1:key2 => "AATTCCGG"
     public Hashtable<String, Integer> msa_pairs_scores = new Hashtable<String, Integer>();
-    public Hashtable<String, Integer> msa_pairs_distances = new Hashtable<String, Integer>();
-    public double avgOutgroupDistance;
+    //key1:key2 => 34, etc
+    public Hashtable<String, Double> msa_pairs_distances = new Hashtable<String, Double>();
+    //{(key1:key2, 3.04), (key1:key3, 3.13), etc
+    
+    public String[] msa_alignment; //lol
 
-    //newick tree?
-    // public Hashtable<String, Integer>
+    public double avgOutgroupDistance = 0.0;
+    public String outGroup;
 
     //some default values
     public int openGapPenalty = -5;
@@ -57,13 +61,8 @@ public class SequenceAligner{
     public static void main(String []args){
         Hashtable<String, String> parameters = new Hashtable<String, String>();
         SequenceAligner seq_aligner = new SequenceAligner();
-        if (args.length > 0 && (args[0].equals("-i") || args[0].equals("--interactive"))) {
-            //--interactive or -i
-            seq_aligner.startInteractive();
-            // parameters.put(args[0], "True");
-        } else if (args.length > 0 && (args[0].equals("-h") || args[0].equals("--help"))) {
-            System.out.println("params: --interactive or -i");
-            System.out.println("-h or --help to print this screen.");
+        if (args.length > 0 && (args[0].equals("-h") || args[0].equals("--help"))) {
+            System.out.println("params: -h or --help to print this screen.");
             System.out.println("--type or -t (n|N or p|P) for nucleotide or protein match");
             System.out.println("--file or -f [filepath]");
             System.out.println("-m or --match [score]");
@@ -103,7 +102,7 @@ public class SequenceAligner{
 
             //return the alignment.
             seq_aligner.getAlignment(matrix, cell_origin_matrix, keys[1], keys[0], seq1, seq2);
-        } else { //multiple pair alignment. todo.
+        } else { //Starting MSA Alignment
             seq_aligner.multiseq = true; //not sure why we need this...to tell prettyprint something?
             String consensus = "";
 
@@ -139,6 +138,8 @@ public class SequenceAligner{
 
                     System.out.println("score: " + score);
                     System.out.println("distance: " + distance);
+
+                    //"In the MSA, you can use simple alignment scores.""
                     if (score > max) {
                         max = score;   
                         max_i = i;
@@ -166,7 +167,8 @@ public class SequenceAligner{
                     for (int j = 0; j < keypairs.length; j++) {
                         if (keypairs[j].contains(key[i])) {
                             seq_aligner.msa_pairs_scores.remove(keypairs[j]);
-                            seq_aligner.msa_pairs_distances.remove(keypairs[j]);
+                            //seq_aligner.msa_pairs_distances.remove(keypairs[j]);
+                            //probably remove, then make new distances.
                             seq_aligner.msa_pairs.remove(keypairs[j]);
                         }
                     }
@@ -184,7 +186,7 @@ public class SequenceAligner{
             }
 
             String consensusKey = s.keySet().toArray(new String[s.size()])[0];
-            System.out.println("consensus: " + consensusKey + " value: " + s.get(consensusKey));
+            System.out.println("Newick Tree Format: " + consensusKey + "\nConsensus: " + s.get(consensusKey));
         }
      }
 
@@ -369,26 +371,6 @@ public class SequenceAligner{
         // System.out.println("got to end of start method");
     }
 
-     /*
-     * The interactive interface to this program.
-     * @todo: ask for scoring params.
-     */
-    public void startInteractive() {
-        System.out.println("Welcome to Sequence Alignment. \nWe will help you align two sequences. \nLet's begin. \nProtein (p|P) or Nucleic Acid (n|N)?");
-        //store response.
-        Scanner scan = new Scanner(System.in);
-        seq_type = scan.nextLine();
-
-        System.out.println("Please give a complete file name. \nInclude the relative path to file \nfrom this directory or \nan absolute file path:");
-
-        String filename = scan.nextLine();
-        
-        this.parseFile(filename);
-
-        System.out.println("configure the opening gap penalty: (-5)");
-        System.out.println("configure the gap extension penalty: (-1)");
-     }
-
     public int[][] createMatrix(String seq1, String seq2) {
         // System.out.println("seq1: " + seq1);
         // System.out.println("seq2: " + seq2);
@@ -440,8 +422,8 @@ public class SequenceAligner{
             }
         }
 
-        // System.out.println("Ran the al-gore-rhythm, here is the matrix:");
-        // this.printMatrix(matrix, cell_origin, seq1, seq2);
+        System.out.println("Ran the al-gore-rhythm, here is the matrix:");
+        this.printMatrix(matrix, cell_origin, seq1, seq2);
     }
 
     /* Assigns max scores to matrix, assigns direction to cell_origin matrix */
@@ -483,9 +465,7 @@ public class SequenceAligner{
     }
 
     /* 
-    * @todo: LOTS OF ASSUMPTIONS
-    * when u assuuuume
-    * THIS WILL BE FIXED TOO--
+    * decides open / extend gap penalty.
     */
     public int decideGapPenalty(int[][] matrix, Direction[][] cell_origin, int i, int j, int prev_i, int prev_j) {
         if (prev_i < i) { //from top
@@ -548,17 +528,37 @@ public class SequenceAligner{
         int max_i_index = 0;
         int i = matrix.length-1;
 
+        List<Integer>max_i_indices = new ArrayList<Integer>();
+        List<Integer>max_j_indices = new ArrayList<Integer>();
+
         for (int j = 0; j < matrix[i].length; j++) {
             if (j == 0) {
                 max = matrix[i][j];
                 max_j_index = 0;
+
+                max_j_indices.add(new Integer(max_j_index));
+                max_i_indices.add(new Integer(max_i_index));
             } else {
                 if (matrix[i][j] > max) {
                     max = matrix[i][j];
-                    max_j_index = j;
-                    max_i_index = i;
+                    // max_j_index = j;
+                    // max_i_index = i;
+                    max_j_indices.clear();
+                    max_i_indices.clear();
+
+                    // System.out.println("max_j_indices.size(); " + max_j_indices.size());
+                    // System.out.println("clearing prev, then adding: " + i + " , " + j);
+
+                    max_j_indices.add(new Integer(j));
+                    max_i_indices.add(new Integer(i));
                 } else if (matrix[i][j] == max) {
-                    //we have to worry about tiebreakers..?
+                    //tie. add without clearing.
+                    // System.out.println("max_j_indices.size(); " + max_j_indices.size());
+                    // System.out.println("adding without clearing: " + i + " , " + j);
+                    
+
+                    max_j_indices.add(new Integer(j));
+                    max_i_indices.add(new Integer(i));
                 }
             }
         }
@@ -567,11 +567,19 @@ public class SequenceAligner{
         int j = matrix[0].length-1;
         for (int k = 0; k < matrix.length-1; k++) {
             if (matrix[k][j] > max) {
-                max_j_index = j;
-                max_i_index = k;
+                // System.out.println("along the rightmost column, coordinates of max score: " + i + " , " + j);
+                max_j_indices.clear();
+                max_i_indices.clear();
+
+                max_j_indices.add(new Integer(j));
+                max_i_indices.add(new Integer(k));
                 max = matrix[k][j];
             } else if (matrix[k][j] == max) {
-                //tiebreakers.
+                // System.out.println("max_j_indices.size(); " + max_j_indices.size());
+                // System.out.println("adding without clearing: " + k + " , " + j);
+                
+                max_j_indices.add(new Integer(j));
+                max_i_indices.add(new Integer(k));
             }
         }
 
@@ -579,12 +587,28 @@ public class SequenceAligner{
         // System.out.println("Max: " + max + " at j: " + max_j_index + " at i: " + max_i_index);
 
         //@todo: before traverse, pretty print terminal gap
-        String terminalGap = "";
-        if (max_i_index != matrix.length-1 || max_j_index != matrix[0].length-1) {
-            terminalGap = prettyPrintTerminal(max_i_index, max_j_index, matrix, cell_origin, seq1, seq2);
-        }
+        List<String> terminalGaps = new ArrayList<String>();
 
-        this.traverse(max_i_index, max_j_index, max, matrix, cell_origin, key1, key2, seq1, seq2, terminalGap);
+        // System.out.println("max_j_indices.size(); " + max_j_indices.size());
+        for (int k = 0; k < max_j_indices.size(); k++) {
+            String terminalGap = "";
+            i = max_i_indices.get(k).intValue();
+            j = max_j_indices.get(k).intValue();
+            
+            // System.out.println("coordinates of max score: " + i + " , " + j);
+            int m = matrix.length - 1;
+            int n = matrix[0].length - 1;
+            // System.out.println("matrix.length-1: " +  m + " , maxtrix[0].length -1: " + n);
+            if (i != matrix.length-1 || j != matrix[0].length -1 ) {
+                // System.out.println("adding a terminal gap");
+                terminalGaps.add(k, prettyPrintTerminal(i, j, matrix, cell_origin, seq1, seq2));
+            } else {
+                terminalGaps.add(k, "");
+            }
+
+            this.traverse(i, j, max, matrix, cell_origin, key1, key2, seq1, seq2, terminalGaps.get(k));
+            this.numSolutions = 0;
+        }
     }
 
     /* STRT, LEFT, TOP, DG, LD, TD, LT, ALL;
@@ -608,7 +632,9 @@ public class SequenceAligner{
                     System.out.println("adding pair " + key + " into msa hashes");
                     this.msa_pairs.put(key, output);  
                     this.msa_pairs_scores.put(key, new Integer(max));
-                    this.msa_pairs_distances.put(key, this.distance(output)); //needed?
+                    System.out.println("putting into msa_pairs_distances key: " + key + " distance: " + this.distance(output));
+                    
+                    this.msa_pairs_distances.put(key, this.distance(output));
                 } else {
                     // since traverse method favors going diagonal in case of ties, I am inclined to comment out the following
                     //String entry = this.msa_pairs.get(key);
@@ -719,25 +745,98 @@ public class SequenceAligner{
         return toReturn;
     }
 
-    public int distance(String alignment) {
-        int distance = 0;
+    public double distance(String key1, String key2) {
+        String alignment = this.msa_pairs.get(key1 + ":" + key2);
 
+        if (alignment == null) {
+            alignment = this.msa_pairs.get(key2 + ":" + key1);
+        }
+
+        // String seq2 = this.msa_pairs.get(key2);
+        return this.distance(alignment);
+    }
+
+    //returns pairwise distance of the alignment. 
+    //kimura distances returned NaN in some cases due to negative logs, which were not useful.
+    public Double distance(String alignment) {
+        int distance = 0;
         for (int i = 0; i < alignment.length()-1; i++) {
             if (alignment.charAt(i) != alignment.charAt(i+1)) {
                 distance++;
             }
         }
-        return distance;
+        return (double) distance;
+
+        // int transitions = 0;
+        // int transversions = 0;
+        // int length = 0;
+
+        // if (alignment.length() % 2 != 0) {
+        //     System.out.println("error, alignment string is of odd length");
+        //     System.exit(1);
+        // } else {
+        //     length = alignment.length() / 2;
+        //     System.out.println("computing kimura distance, length: " + length);
+        //     for (int i = 0; i < alignment.length()-1; i++) {
+        //         if (alignment.charAt(i) == 'A' && alignment.charAt(i+1) == 'G' || 
+        //             alignment.charAt(i) == 'G' && alignment.charAt(i+1) == 'A' ||
+        //             alignment.charAt(i) == 'C' && alignment.charAt(i+1) == 'T' ||
+        //             alignment.charAt(i) == 'T' && alignment.charAt(i+1) == 'C' ||
+        //             alignment.charAt(i) == 'C' && alignment.charAt(i+1) == 'U' ||
+        //             alignment.charAt(i) == 'U' && alignment.charAt(i+1) == 'C' ) {
+        //             transitions++;
+        //         } else if (
+        //             alignment.charAt(i) == 'A' && alignment.charAt(i+1) == 'T' ||
+        //             alignment.charAt(i) == 'T' && alignment.charAt(i+1) == 'A' ||
+        //             alignment.charAt(i) == 'A' && alignment.charAt(i+1) == 'U' || 
+        //             alignment.charAt(i) == 'U' && alignment.charAt(i+1) == 'A' || 
+
+        //             alignment.charAt(i) == 'G' && alignment.charAt(i+1) == 'T' || 
+        //             alignment.charAt(i) == 'G' && alignment.charAt(i+1) == 'U' || 
+        //             alignment.charAt(i) == 'U' && alignment.charAt(i+1) == 'G' ||  
+        //             alignment.charAt(i) == 'T' && alignment.charAt(i+1) == 'G' ||
+
+        //             alignment.charAt(i) == 'A' && alignment.charAt(i+1) == 'C' || 
+        //             alignment.charAt(i) == 'C' && alignment.charAt(i+1) == 'A' ||
+
+        //             alignment.charAt(i) == 'G' && alignment.charAt(i+1) == 'C' || 
+        //             alignment.charAt(i) == 'C' && alignment.charAt(i+1) == 'G' ) {
+        //             transversions++;
+        //         }
+        //     }
+        // }
+
+        // double p = (double) transitions / (double) length;
+        // double q = (double) transversions / (double) length;
+
+        // System.out.println("p: " + p);
+        // System.out.println("q: " + q);
+        // System.out.println("(1/(1 - 2*p -q)) : " + 1/(1-2*p-q));
+        // System.out.println("0.25*Math.log(1/(1 - 2*q)) : " + 0.25*Math.log(1/(1 - 2*q)));
+        // return 0.5*Math.log(1/(1-2*p-q)) + 0.25*Math.log(1/(1 - 2*q));
     }
 
-    public double avgOutgroupDistance(String outGroup) {
-        return 0.0;
+    //
+    public double computeAvgOutgroupDistance(String outGroup) {
+        String[] keys = this.msa_pairs_distances.keySet().toArray(new String[this.msa_pairs_distances.size()]);
+        int sum = 0;
+        // System.out.println("computing avg distance, sum: " + sum );
+        for (int i = 0; i < keys.length; i++) {
+            if (keys[i].contains(outGroup)) {
+                sum+=this.msa_pairs_distances.get(keys[i]);
+                // System.out.println("computing avg distance, i: " + i + " sum: " + sum ); 
+            }
+        }
+        return (double) sum / keys.length;
     }
 
-    public double transformedDistance(String speciesA, String speciesB, String outGroup) { 
-        Integer ab_distance = this.msa_pairs_distances.get(speciesA + ":" + speciesB);
+    public double transformDistance(String speciesA, String speciesB, String outGroup) {
+        System.out.println("in transformDistance");
+        System.out.println("getting msa_pairs_distances, key: " + speciesA + ":" + speciesB);
+        Double ab_distance = this.msa_pairs_distances.get(speciesA + ":" + speciesB);
         if (ab_distance == null) {
             System.out.println("ab_distance was null, reversing the key");
+            System.out.println("getting msa_pairs_distances, key: " + speciesB + ":" + speciesA);
             ab_distance = this.msa_pairs_distances.get(speciesB + ":" + speciesA);   
             if (ab_distance == null) {
                 System.out.println("paired distance is still null...crashing");
@@ -746,23 +845,27 @@ public class SequenceAligner{
         }  
         double ab = (double) ab_distance.intValue();
 
-        Integer ao_distance = this.msa_pairs_distances.get(speciesA + ":" + outGroup); 
+        System.out.println("getting msa_pairs_distances, key: " + speciesA + ":" + outGroup);
+        Double ao_distance = this.msa_pairs_distances.get(speciesA + ":" + outGroup); 
         if (ao_distance == null) {
             System.out.println("ao_distance was null, reversing the key");
+            System.out.println("getting msa_pairs_distances, key: " + outGroup + ":" + speciesA);
             ao_distance = this.msa_pairs_distances.get(outGroup + ":" + speciesA);
             if (ao_distance == null) {
-                System.out.println("ao_distance is sill null...crashing");
+                System.out.println("ao_distance is still null...crashing");
                 System.exit(1);
             }
         }
         double ao = (double) ao_distance.intValue();
         
-        Integer bo_distance = this.msa_pairs_distances.get(speciesB + ":" + outGroup); 
+        System.out.println("getting msa_pairs_distances, key: " + speciesB + ":" + outGroup);    
+        Double bo_distance = this.msa_pairs_distances.get(speciesB + ":" + outGroup); 
         if (bo_distance == null) {
             System.out.println("bo_distance was null, reversing the key");
-            ao_distance = this.msa_pairs_distances.get(outGroup + ":" + speciesB);
+            System.out.println("getting msa_pairs_distances, key: " + outGroup + ":" + speciesB);
+            bo_distance = this.msa_pairs_distances.get(outGroup + ":" + speciesB);
             if (bo_distance == null) {
-                System.out.println("ao_distance is sill null...crashing");
+                System.out.println("bo_distance is still null...crashing");
                 System.exit(1);
             }
         }
